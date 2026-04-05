@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-audio-tagging"
+version = "1.0.0"
+description = "Federated Learning for Urban Audio Tagging"
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.27.0",
+    "flwr-datasets[audio]>=0.6.0",
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    "soundfile>=0.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "camlsys"
+
+[tool.flwr.app.components]
+serverapp = "fedaudio.server_app:app"
+clientapp = "fedaudio.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "clients0.3_lr1e-2_to_1e-4_round100"
+num-server-rounds = 100
+fraction-train = 0.3
+fraction-evaluate = 0.0
+local-epochs = 2
+learning-rate-max = 1e-2
+learning-rate-min = 1e-4
+batch-size = 32
+
+# Simulation partitioner: "iid" or "natural"
+# natural => partition by BankID from the train split
+partitioner = "natural"

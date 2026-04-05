@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-med-seg"
+version = "1.0.0"
+description = "Federated Brain Tumor Segmentation with Flower + MONAI"
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.26.1",
+    "flwr-datasets[vision]>=0.6.0",
+    "torch>=2.2.0",
+    "monai>=1.3.2",
+    "nibabel>=5.2.1",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.0",
+    "tqdm>=4.66.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "yan-gao"
+
+[tool.flwr.app.components]
+serverapp = "fed_med_seg.server_app:app"
+clientapp = "fed_med_seg.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "default"
+num-server-rounds = 15
+fraction-evaluate = 0.0
+local-epochs = 3
+learning-rate-max = 1e-4
+learning-rate-min = 1e-5
+batch-size = 4
+roi-x = 128
+roi-y = 128
+roi-z = 128
+num-classes = 4
+
+# Simulation partitioner: "iid" or "natural"
+partitioner = "natural"

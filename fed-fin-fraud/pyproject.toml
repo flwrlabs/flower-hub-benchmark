@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-fin-fraud"
+version = "1.0.0"
+description = "Federated financial fraud detection with Flower + PyTorch"
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.26.1",
+    "flwr-datasets>=0.6.0",
+    "torch==2.10.0",
+    "datasets>=2.19.0",
+    "huggingface_hub>=0.23.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "tqdm>=4.66.0",
+    "scikit-learn>=1.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "yan-gao"
+
+[tool.flwr.app.components]
+serverapp = "fed_fraud.server_app:app"
+clientapp = "fed_fraud.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "lr-1e-4-to-1e-5-epoch2-round15-layernorm-thres"
+dataset-id = "yangao381/fed-fraud-paysim-banks"
+
+num-server-rounds = 15
+fraction-evaluate = 0.0
+local-epochs = 2
+learning-rate-max = 1e-4
+learning-rate-min = 1e-5
+batch-size = 1024
+
+hidden-dim-1 = 128
+hidden-dim-2 = 64
+dropout = 0.1
+use-class-weights = true
+
+# Simulation partitioner: "iid" or "natural"
+# natural => partition by BankID from the train split
+partitioner = "natural"
