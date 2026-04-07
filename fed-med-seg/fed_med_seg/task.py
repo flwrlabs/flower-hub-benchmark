@@ -34,7 +34,7 @@ from monai.transforms import (
 from tqdm.auto import tqdm
 
 MODALITIES = ["t1n", "t1c", "t2w", "t2f"]
-HF_DATASET_ID = "flwrlabs/Fed-BraTS"
+HF_DATASET_ID = "flwrlabs/fed-brats"
 
 fds = None
 _hf_repo_root = None
@@ -359,7 +359,7 @@ def load_centralized_dataset(
     )
 
 
-def train(net, trainloader, epochs, lr, device):
+def train(net, trainloader, epochs, lr, device, show_progress = False):
     """Train one local client model."""
     net.to(device)
     loss_fn = DiceCELoss(to_onehot_y=True, softmax=True)
@@ -377,6 +377,7 @@ def train(net, trainloader, epochs, lr, device):
             desc=f"Train Epoch {epoch + 1}/{epochs}",
             unit="batch",
             leave=False,
+            disable=not show_progress,
         )
 
         for batch_data in progress_bar:

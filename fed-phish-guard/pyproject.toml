@@ -31,6 +31,8 @@ clientapp = "phishguard.client_app:app"
 [tool.flwr.app.config]
 run-name = "lr_1e-3_to_1e-4_epoch1_round20"
 num-server-rounds = 20
+strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
+fedprox-mu = 0.01
 fraction-train = 0.1
 fraction-evaluate = 0.0
 local-epochs = 1

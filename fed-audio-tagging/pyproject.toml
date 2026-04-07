@@ -28,6 +28,8 @@ clientapp = "fedaudio.client_app:app"
 [tool.flwr.app.config]
 run-name = "clients0.3_lr1e-2_to_1e-4_round100"
 num-server-rounds = 100
+strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
+fedprox-mu = 0.01
 fraction-train = 0.3
 fraction-evaluate = 0.0
 local-epochs = 2

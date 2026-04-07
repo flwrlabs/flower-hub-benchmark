@@ -5,7 +5,16 @@ from pyexpat import model
 import torch
 from flwr.app import ArrayRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+from flwr.serverapp.strategy import (
+    Bulyan,
+    FedAdagrad,
+    FedAdam, 
+    FedAvg,
+    FedAvgM, 
+    FedProx,
+    FedYogi,
+    Krum,
+)
 
 from fedaudio.task import load_centralized_dataset, make_model, test
 
@@ -22,15 +31,18 @@ def main(grid: Grid, context: Context) -> None:
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]
     run_name = str(context.run_config["run-name"])
+    strategy_name = context.run_config["strategy"]
 
     # Load global model
     global_model = make_model()
     arrays = ArrayRecord(global_model.state_dict())
 
-    # Initialize FedAvg strategy
-    strategy = FedAvg(
-        fraction_evaluate=fraction_evaluate,
+    # Initialize strategy
+    strategy = get_strategy(
+        strategy_name=strategy_name,
         fraction_train=fraction_train,
+        fraction_evaluate=fraction_evaluate,
+        context=context,
     )
 
     # Start strategy, run FedAvg for `num_rounds`
@@ -44,6 +56,53 @@ def main(grid: Grid, context: Context) -> None:
     print(f"\nSaving result to disk as result_{run_name}.pkl...")
     with open(f"result_{run_name}.pkl", "wb") as f:
         pickle.dump(result, f)
+
+
+def get_strategy(strategy_name: str, fraction_train: float, fraction_evaluate: float, context: Context):
+    """Get strategy based on the strategy name."""
+    if strategy_name.lower() == "fedavg":
+        return FedAvg(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedprox":
+        return FedProx(
+                fraction_train=fraction_train,
+                fraction_evaluate=fraction_evaluate,
+                proximal_mu=float(context.run_config["fedprox-mu"]),
+               )
+    elif strategy_name.lower() == "fedavgm":
+        return FedAvgM(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedadam":
+        return FedAdam(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )   
+    elif strategy_name.lower() == "fedadagrad":
+        return FedAdagrad(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedyogi":
+        return FedYogi(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "krum":
+        return Krum(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "bulyan":
+        return Bulyan(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    else:
+        raise ValueError(f"Unsupported strategy '{strategy_name}'.")
 
 
 def global_evaluate_fn(context: Context):

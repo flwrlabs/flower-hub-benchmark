@@ -31,9 +31,10 @@ clientapp = "fed_fraud.client_app:app"
 
 [tool.flwr.app.config]
 run-name = "lr-1e-4-to-1e-5-epoch2-round15-layernorm-thres"
-dataset-id = "yangao381/fed-fraud-paysim-banks"
-
 num-server-rounds = 15
+strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
+fedprox-mu = 0.01
+fraction-train = 1.0
 fraction-evaluate = 0.0
 local-epochs = 2
 learning-rate-max = 1e-4

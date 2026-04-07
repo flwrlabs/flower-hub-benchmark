@@ -5,7 +5,16 @@ import pickle
 import torch
 from flwr.app import ArrayRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+from flwr.serverapp.strategy import (
+    Bulyan,
+    FedAdagrad,
+    FedAdam, 
+    FedAvg,
+    FedAvgM, 
+    FedProx,
+    FedYogi,
+    Krum,
+)
 
 from fed_fraud.task import Net, get_input_dim, load_centralized_dataset, test
 
@@ -15,9 +24,11 @@ app = ServerApp()
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
+    fraction_train = float(context.run_config["fraction-train"])
     fraction_evaluate = float(context.run_config["fraction-evaluate"])
     num_rounds = int(context.run_config["num-server-rounds"])
     run_name = str(context.run_config["run-name"])
+    strategy_name = context.run_config["strategy"]
 
     global_model = Net(
         input_dim=get_input_dim(),
@@ -27,7 +38,12 @@ def main(grid: Grid, context: Context) -> None:
     )
     arrays = ArrayRecord(global_model.state_dict())
 
-    strategy = FedAvg(fraction_evaluate=fraction_evaluate)
+    strategy = get_strategy(
+        strategy_name=strategy_name,
+        fraction_train=fraction_train,
+        fraction_evaluate=fraction_evaluate,
+        context=context,
+    )
 
     result = strategy.start(
         grid=grid,
@@ -40,6 +56,53 @@ def main(grid: Grid, context: Context) -> None:
     with open(f"result_{run_name}.pkl", "wb") as f:
         pickle.dump(result, f)
 
+
+def get_strategy(strategy_name: str, fraction_train: float, fraction_evaluate: float, context: Context):
+    """Get strategy based on the strategy name."""
+    if strategy_name.lower() == "fedavg":
+        return FedAvg(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedprox":
+        return FedProx(
+                fraction_train=fraction_train,
+                fraction_evaluate=fraction_evaluate,
+                proximal_mu=float(context.run_config["fedprox-mu"]),
+               )
+    elif strategy_name.lower() == "fedavgm":
+        return FedAvgM(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedadam":
+        return FedAdam(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )   
+    elif strategy_name.lower() == "fedadagrad":
+        return FedAdagrad(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "fedyogi":
+        return FedYogi(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "krum":
+        return Krum(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    elif strategy_name.lower() == "bulyan":
+        return Bulyan(
+                fraction_train=fraction_train, 
+                fraction_evaluate=fraction_evaluate,
+               )
+    else:
+        raise ValueError(f"Unsupported strategy '{strategy_name}'.")
+    
 
 def global_evaluate_fn(context: Context):
     def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
