@@ -20,13 +20,13 @@ from torch.optim import AdamW
 from tqdm import tqdm
 
 
-def train_epoch(model, dataloader, criterion, optimizer, device, max_grad_norm: float = 1.0):
+def train_epoch(model, dataloader, criterion, optimizer, device, max_grad_norm: float = 1.0, show_progress: bool = False):
     """Train for one epoch."""
     model.train()
     total_loss = 0.0
     num_batches = 0
 
-    progress = tqdm(dataloader, desc="Training", leave=False)
+    progress = tqdm(dataloader, desc="Training", leave=False, disable=not show_progress)
     for batch in progress:
         input_ids = batch["input_ids"].to(device)
         labels = batch["label"].to(device).float()
@@ -46,7 +46,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device, max_grad_norm: 
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, pos_weight, device):
+def evaluate(model, dataloader, pos_weight, device, show_progress: bool = False):
     """Evaluate model on a dataset."""
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     model.eval()
@@ -56,7 +56,7 @@ def evaluate(model, dataloader, pos_weight, device):
     all_probs = []
     all_labels = []
 
-    for batch in tqdm(dataloader, desc="Evaluating", leave=False):
+    for batch in tqdm(dataloader, desc="Evaluating", leave=False, disable=not show_progress):
         input_ids = batch["input_ids"].to(device)
         labels = batch["label"].to(device).float()
 

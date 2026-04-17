@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Federated Learning for Phishing URL Detection"
 license = "Apache-2.0"
 dependencies = [
-    "flwr[simulation]>=1.27.0",
+    "flwr[simulation]>=1.29.0",
     "flwr-datasets>=0.6.0",
     "torch==2.8.0",
     "datasets==3.5.0",
@@ -29,10 +29,12 @@ serverapp = "phishguard.server_app:app"
 clientapp = "phishguard.client_app:app"
 
 [tool.flwr.app.config]
-run-name = "lr_1e-3_to_1e-4_epoch1_round20"
+run-name = "fedavg_round20"
 num-server-rounds = 20
-strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
+strategy = "fedavg"  # choose from [fedavg, fedprox, fedavgm, ...]
 fedprox-mu = 0.01
+eta = 5e-4
+eta_l = 1e-3
 fraction-train = 0.1
 fraction-evaluate = 0.0
 local-epochs = 1

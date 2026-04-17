@@ -80,16 +80,22 @@ def get_strategy(strategy_name: str, fraction_train: float, fraction_evaluate: f
         return FedAdam(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
+                eta=float(context.run_config["eta"]),
+                eta_l=float(context.run_config["eta_l"]),
                )   
     elif strategy_name.lower() == "fedadagrad":
         return FedAdagrad(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
+                eta=float(context.run_config["eta"]),
+                eta_l=float(context.run_config["eta_l"]),
                )
     elif strategy_name.lower() == "fedyogi":
         return FedYogi(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
+                eta=float(context.run_config["eta"]),
+                eta_l=float(context.run_config["eta_l"]),
                )
     elif strategy_name.lower() == "krum":
         return Krum(

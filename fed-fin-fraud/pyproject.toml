@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Federated financial fraud detection with Flower + PyTorch"
 license = "Apache-2.0"
 dependencies = [
-    "flwr[simulation]>=1.26.1",
+    "flwr[simulation]>=1.29.0",
     "flwr-datasets>=0.6.0",
     "torch==2.10.0",
     "datasets>=2.19.0",
@@ -30,10 +30,14 @@ serverapp = "fed_fraud.server_app:app"
 clientapp = "fed_fraud.client_app:app"
 
 [tool.flwr.app.config]
-run-name = "lr-1e-4-to-1e-5-epoch2-round15-layernorm-thres"
-num-server-rounds = 15
-strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
-fedprox-mu = 0.01
+run-name = "fedavg_round20"
+num-server-rounds = 20
+strategy = "fedavg"  # choose from [fedavg, fedprox, fedavgm, ...]
+fedprox-mu = 0.1
+# eta = 5e-5
+# eta_l = 1e-4
+eta = 1e-1
+eta_l = 1e-1
 fraction-train = 1.0
 fraction-evaluate = 0.0
 local-epochs = 2

@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Federated Brain Tumor Segmentation with Flower + MONAI"
 license = "Apache-2.0"
 dependencies = [
-    "flwr[simulation]>=1.28.0",
+    "flwr[simulation]>=1.29.0",
     "flwr-datasets[vision]>=0.6.0",
     "torch==2.10.0",
     "monai>=1.3.2",
@@ -31,7 +31,7 @@ clientapp = "fed_med_seg.client_app:app"
 [tool.flwr.app.config]
 run-name = "fedavg_round20"
 num-server-rounds = 20
-strategy = "fedavg"  # choose from [fedavg, fedprox, ...]
+strategy = "fedavg"  # choose from [fedavg, fedprox, fedavgm, ...]
 fedprox-mu = 0.01
 fraction-train = 1.0
 fraction-evaluate = 0.0
