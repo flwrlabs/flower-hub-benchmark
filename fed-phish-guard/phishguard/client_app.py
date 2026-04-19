@@ -75,6 +75,7 @@ def _load_data(context: Context, batch_size: int, device: torch.device):
             num_partitions=int(context.node_config["num-partitions"]),
             batch_size=batch_size,
             device=device,
+            partitioner_name=str(context.run_config["partitioner"]),
         )
 
     if "data-path" not in context.node_config:
@@ -83,7 +84,7 @@ def _load_data(context: Context, batch_size: int, device: torch.device):
         )
 
     return load_local_data(
-        data_path=context.node_config["data-path"],
+        data_path=str(context.node_config["data-path"]),
         batch_size=batch_size,
         device=device,
     )

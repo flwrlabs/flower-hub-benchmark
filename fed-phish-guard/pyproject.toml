@@ -44,3 +44,7 @@ batch-size = 128
 embed-dim = 64
 num-filters = 128
 dropout = 0.3
+
+# Simulation partitioner: "iid" or "natural"
+# natural => partition by BankID from the train split
+partitioner = "natural"

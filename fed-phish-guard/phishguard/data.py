@@ -22,7 +22,7 @@ import torch
 from datasets import Dataset as HFDataset
 from datasets import DatasetDict, load_dataset, load_from_disk
 from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import NaturalIdPartitioner
+from flwr_datasets.partitioner import IidPartitioner, NaturalIdPartitioner
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import WeightedRandomSampler
@@ -198,10 +198,30 @@ def _make_trainloader_from_split(
     return trainloader, pos_weight
 
 
-def _load_sim_fds(dataset_id: str = SIM_FED_DATASET_ID) -> FederatedDataset:
+def _make_partitioner(partitioner_name: str, num_partitions: int):
+    name = partitioner_name.strip().lower()
+
+    if name == "iid":
+        return IidPartitioner(num_partitions=num_partitions)
+
+    if name == "natural":
+        return NaturalIdPartitioner(partition_by=PARTITION_COL)
+
+    raise ValueError(
+        f"Unsupported partitioner '{partitioner_name}'. "
+        "Use 'iid' or 'natural'."
+    )
+
+
+def _load_sim_fds(
+    dataset_id: str = SIM_FED_DATASET_ID, 
+    partitioner_name: str = "iid", 
+    num_partitions: int = 5,
+) -> FederatedDataset:
     """Load the simulation dataset through flwr-datasets and cache it."""
     if dataset_id not in _FDS_CACHE:
-        train_partitioner = NaturalIdPartitioner(partition_by=PARTITION_COL)
+        normalized_partitioner = partitioner_name.strip().lower()
+        train_partitioner = _make_partitioner(normalized_partitioner, num_partitions)
         _FDS_CACHE[dataset_id] = FederatedDataset(
             dataset=dataset_id,
             partitioners={"train": train_partitioner},
@@ -215,31 +235,28 @@ def load_sim_data(
     batch_size: int,
     device: torch.device,
     dataset_id: str = SIM_FED_DATASET_ID,
+    partitioner_name: str = "iid",
 ) -> tuple[DataLoader, torch.Tensor]:
     """Load client-local TRAIN data for simulation mode."""
-    fds = _load_sim_fds(dataset_id)
+    fds = _load_sim_fds(dataset_id, partitioner_name, num_partitions)
     train_client_ds = fds.load_partition(partition_id, "train")
 
     if len(train_client_ds) == 0:
         raise ValueError(
             f"No training samples found for partition_id={partition_id} in {dataset_id}"
         )
+    
+    if partitioner_name.strip().lower() == "natural":
+        client_ids = set(int(x) for x in train_client_ds[PARTITION_COL])
+        if len(client_ids) != 1:
+            raise RuntimeError("NaturalIdPartitioner returned a mixed-client partition.")
 
-    if PARTITION_COL not in train_client_ds.column_names:
-        raise ValueError(
-            f"Train split must contain '{PARTITION_COL}'. Found: {train_client_ds.column_names}"
+        natural_client_id = next(iter(client_ids))
+        print(
+            f"Loaded simulation partition {partition_id}/{num_partitions - 1} "
+            f"(natural client_id={natural_client_id}) from {dataset_id}: "
+            f"train={len(train_client_ds):,}"
         )
-
-    client_ids = set(int(x) for x in train_client_ds[PARTITION_COL])
-    if len(client_ids) != 1:
-        raise RuntimeError("NaturalIdPartitioner returned a mixed-client partition.")
-
-    natural_client_id = next(iter(client_ids))
-    print(
-        f"Loaded simulation partition {partition_id}/{num_partitions - 1} "
-        f"(natural client_id={natural_client_id}) from {dataset_id}: "
-        f"train={len(train_client_ds):,}"
-    )
 
     return _make_trainloader_from_split(
         train_ds=train_client_ds,
