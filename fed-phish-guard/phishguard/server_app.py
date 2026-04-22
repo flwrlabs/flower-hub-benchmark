@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import pickle
 import torch
 from flwr.app import ArrayRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import (
     Bulyan,
-    FedAdagrad,
-    FedAdam, 
-    FedAvg,
-    FedAvgM, 
-    FedProx,
-    FedYogi,
     Krum,
 )
 
+from phishguard.benchmarking import (
+    BenchmarkFedAdagrad,
+    BenchmarkFedAdam,
+    BenchmarkFedAvg,
+    BenchmarkFedAvgM,
+    BenchmarkFedProx,
+    BenchmarkFedYogi,
+    build_communication_summary,
+)
 from phishguard.data import VOCAB_SIZE, load_centralized_dataset
 from phishguard.model import PhishingCNN
 from phishguard.train import evaluate as test
@@ -61,42 +65,44 @@ def main(grid: Grid, context: Context) -> None:
     print(f"\nSaving result to disk as result_{run_name}.pkl...")
     with open(f"result_{run_name}.pkl", "wb") as f:
         pickle.dump(result, f)
+    with open(f"result_{run_name}_communication.json", "w", encoding="utf-8") as f:
+        json.dump(build_communication_summary(result), f, indent=2, sort_keys=True)
 
 
 def get_strategy(strategy_name: str, fraction_train: float, fraction_evaluate: float, context: Context):
     """Get strategy based on the strategy name."""
     if strategy_name.lower() == "fedavg":
-        return FedAvg(
+        return BenchmarkFedAvg(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
                )
     elif strategy_name.lower() == "fedprox":
-        return FedProx(
+        return BenchmarkFedProx(
                 fraction_train=fraction_train,
                 fraction_evaluate=fraction_evaluate,
                 proximal_mu=float(context.run_config["fedprox-mu"]),
                )
     elif strategy_name.lower() == "fedavgm":
-        return FedAvgM(
+        return BenchmarkFedAvgM(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
                )
     elif strategy_name.lower() == "fedadam":
-        return FedAdam(
+        return BenchmarkFedAdam(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
                 eta=float(context.run_config["eta"]),
                 eta_l=float(context.run_config["eta_l"]),
                )   
     elif strategy_name.lower() == "fedadagrad":
-        return FedAdagrad(
+        return BenchmarkFedAdagrad(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
                 eta=float(context.run_config["eta"]),
                 eta_l=float(context.run_config["eta_l"]),
                )
     elif strategy_name.lower() == "fedyogi":
-        return FedYogi(
+        return BenchmarkFedYogi(
                 fraction_train=fraction_train, 
                 fraction_evaluate=fraction_evaluate,
                 eta=float(context.run_config["eta"]),
