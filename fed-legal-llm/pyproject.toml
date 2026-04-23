@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-legal-llm"
+version = "1.0.0"
+description = "Federated LoRA fine-tuning for legal instruction tuning with Flower"
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.29.0",
+    "flwr-datasets>=0.6.0",
+    "torch>=2.11.0",
+    "datasets>=4.8.4",
+    "transformers>=5.6.1",
+    "peft>=0.19.1",
+    "accelerate>=1.13.0",
+    "sentencepiece>=0.2.0",
+    "safetensors>=0.7.0",
+    "tqdm>=4.66.0",
+    "bitsandbytes>=0.49.2; platform_system != 'Darwin'",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fed_legal_llm"]
+
+[tool.flwr.app]
+publisher = "yan-gao"
+
+[tool.flwr.app.components]
+serverapp = "fed_legal_llm.server_app:app"
+clientapp = "fed_legal_llm.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "fedavg_10rounds"
+strategy = "fedavg"
+fedprox-mu = 0.01
+num-server-rounds = 10
+fraction-train = 1.0
+fraction-evaluate = 0.0
+local-epochs = 1
+batch-size = 16
+eval-batch-size = 32
+learning-rate-max = 5e-5
+learning-rate-min = 1e-5
+weight-decay = 0.0
+partitioner = "natural"
+dataset-id = "flwrlabs/fed-legal"
+model-name = "HuggingFaceTB/SmolLM3-3B"
+max-length = 512
+eval-max-new-tokens = 64
+load-in-4bit = true
+torch-dtype = "bfloat16"
+lora-r = 16
+lora-alpha = 32
+lora-dropout = 0.05
+lora-target-modules = "q_proj,k_proj,v_proj,o_proj"
+show-progress = true
