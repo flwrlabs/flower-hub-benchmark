@@ -47,9 +47,7 @@ class RoundCommunication:
 def _recorddict_num_bytes(recorddict: RecordDict) -> int:
     num_bytes = 0
     for record in recorddict.values():
-        count_bytes = getattr(record, "count_bytes", None)
-        if callable(count_bytes):
-            num_bytes += int(count_bytes())
+        num_bytes += int(record.count_bytes())
     return num_bytes
 
 
