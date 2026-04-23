@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import resource
+import sys
+import time
+
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
@@ -31,6 +35,10 @@ def train(msg: Message, context: Context):
         learning_rate_min,
     )
 
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+
+    train_start = time.perf_counter()
     history, _ = train_fn(
         model=model,
         train_loader=trainloader,
@@ -39,6 +47,7 @@ def train(msg: Message, context: Context):
         device=device,
         num_epochs=int(context.run_config["local-epochs"]),
     )
+    client_train_time_sec = time.perf_counter() - train_start
 
     summary = summarize_history(history)
     model_record = ArrayRecord(model.state_dict())
@@ -47,6 +56,9 @@ def train(msg: Message, context: Context):
         "train_accuracy": float(summary["avg_train_accuracy"]),
         "train_f1": float(summary["avg_train_f1"]),
         "num-examples": len(trainloader.dataset),
+        "client_train_time_sec": float(client_train_time_sec),
+        "client_peak_cpu_memory_mb": float(_peak_rss_mb()),
+        "client_peak_gpu_memory_mb": float(_peak_gpu_memory_mb(device)),
     }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"arrays": model_record, "metrics": metric_record})
@@ -69,7 +81,10 @@ def _load_model(msg: Message, context: Context) -> tuple[PhishingCNN, torch.devi
 
 def _load_data(context: Context, batch_size: int, device: torch.device):
     """Select simulation or deployment data loader based on node_config."""
-    if "partition-id" in context.node_config and "num-partitions" in context.node_config:
+    if (
+        "partition-id" in context.node_config
+        and "num-partitions" in context.node_config
+    ):
         return load_sim_data(
             partition_id=int(context.node_config["partition-id"]),
             num_partitions=int(context.node_config["num-partitions"]),
@@ -88,3 +103,16 @@ def _load_data(context: Context, batch_size: int, device: torch.device):
         batch_size=batch_size,
         device=device,
     )
+
+
+# memory cost tracking methods
+def _peak_rss_mb() -> float:
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    scale = 1024 * 1024 if sys.platform == "darwin" else 1024
+    return usage / scale
+
+
+def _peak_gpu_memory_mb(device: torch.device) -> float:
+    if device.type != "cuda":
+        return 0.0
+    return torch.cuda.max_memory_allocated(device) / (1024 * 1024)

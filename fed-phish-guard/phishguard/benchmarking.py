@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from flwr.app import Message
 from flwr.common.record.arrayrecord import ArrayRecord
@@ -27,6 +28,10 @@ COMM_KEYS = (
     "comm_bytes_total",
     "comm_num_messages_down",
     "comm_num_messages_up",
+    "comm_time_sec",
+    "server_aggregation_time_sec",
+    "server_eval_time_sec",
+    "round_wall_clock_sec",
 )
 
 
@@ -38,6 +43,7 @@ class RoundCommunication:
     bytes_up: int
     num_messages_down: int
     num_messages_up: int
+    communication_time_sec: float
 
     @property
     def total_bytes(self) -> int:
@@ -62,7 +68,12 @@ def _messages_num_bytes(messages: list[Message]) -> int:
 
 
 def _with_comm_metrics(
-    metrics: MetricRecord | None, communication: RoundCommunication
+    metrics: MetricRecord | None,
+    communication: RoundCommunication,
+    *,
+    aggregation_time_sec: float = 0.0,
+    server_eval_time_sec: float = 0.0,
+    round_wall_clock_sec: float = 0.0,
 ) -> MetricRecord:
     metric_record = MetricRecord() if metrics is None else metrics
     metric_record["comm_bytes_down"] = communication.bytes_down
@@ -70,6 +81,10 @@ def _with_comm_metrics(
     metric_record["comm_bytes_total"] = communication.total_bytes
     metric_record["comm_num_messages_down"] = communication.num_messages_down
     metric_record["comm_num_messages_up"] = communication.num_messages_up
+    metric_record["comm_time_sec"] = float(communication.communication_time_sec)
+    metric_record["server_aggregation_time_sec"] = float(aggregation_time_sec)
+    metric_record["server_eval_time_sec"] = float(server_eval_time_sec)
+    metric_record["round_wall_clock_sec"] = float(round_wall_clock_sec)
     return metric_record
 
 
@@ -92,56 +107,83 @@ class CommunicationTrackingMixin:
 
         arrays = initial_arrays
         if evaluate_fn:
+            server_eval_start = time.perf_counter()
             res = evaluate_fn(0, initial_arrays)
+            server_eval_time_sec = time.perf_counter() - server_eval_start
             if res is not None:
+                res["server_eval_time_sec"] = float(server_eval_time_sec)
                 result.evaluate_metrics_serverapp[0] = res
 
         for current_round in range(1, num_rounds + 1):
+            round_start = time.perf_counter()
             train_messages = list(
                 self.configure_train(current_round, arrays, train_config, grid)
             )
+            train_comm_start = time.perf_counter()
             train_replies = list(
                 grid.send_and_receive(messages=train_messages, timeout=timeout)
             )
+            train_comm_time_sec = time.perf_counter() - train_comm_start
             train_comm = RoundCommunication(
                 bytes_down=_messages_num_bytes(train_messages),
                 bytes_up=_messages_num_bytes(train_replies),
                 num_messages_down=len(train_messages),
                 num_messages_up=len(train_replies),
+                communication_time_sec=float(train_comm_time_sec),
             )
+            train_aggregation_start = time.perf_counter()
             agg_arrays, agg_train_metrics = self.aggregate_train(
                 current_round, train_replies
             )
+            train_aggregation_time_sec = time.perf_counter() - train_aggregation_start
             if agg_arrays is not None:
                 result.arrays = agg_arrays
                 arrays = agg_arrays
+            round_elapsed_before_eval = time.perf_counter() - round_start
             result.train_metrics_clientapp[current_round] = _with_comm_metrics(
-                agg_train_metrics, train_comm
+                agg_train_metrics,
+                train_comm,
+                aggregation_time_sec=float(train_aggregation_time_sec),
+                round_wall_clock_sec=float(round_elapsed_before_eval),
             )
 
             evaluate_messages = list(
                 self.configure_evaluate(current_round, arrays, evaluate_config, grid)
             )
+            evaluate_comm_start = time.perf_counter()
             evaluate_replies = list(
                 grid.send_and_receive(messages=evaluate_messages, timeout=timeout)
             )
+            evaluate_comm_time_sec = time.perf_counter() - evaluate_comm_start
             if evaluate_messages or evaluate_replies:
                 evaluate_comm = RoundCommunication(
                     bytes_down=_messages_num_bytes(evaluate_messages),
                     bytes_up=_messages_num_bytes(evaluate_replies),
                     num_messages_down=len(evaluate_messages),
                     num_messages_up=len(evaluate_replies),
+                    communication_time_sec=float(evaluate_comm_time_sec),
                 )
+                evaluate_aggregation_start = time.perf_counter()
                 agg_evaluate_metrics = self.aggregate_evaluate(
                     current_round, evaluate_replies
                 )
+                evaluate_aggregation_time_sec = (
+                    time.perf_counter() - evaluate_aggregation_start
+                )
                 result.evaluate_metrics_clientapp[current_round] = _with_comm_metrics(
-                    agg_evaluate_metrics, evaluate_comm
+                    agg_evaluate_metrics,
+                    evaluate_comm,
+                    aggregation_time_sec=float(evaluate_aggregation_time_sec),
+                    round_wall_clock_sec=float(time.perf_counter() - round_start),
                 )
 
             if evaluate_fn:
+                server_eval_start = time.perf_counter()
                 res = evaluate_fn(current_round, arrays)
+                server_eval_time_sec = time.perf_counter() - server_eval_start
                 if res is not None:
+                    res["server_eval_time_sec"] = float(server_eval_time_sec)
+                    res["round_wall_clock_sec"] = float(time.perf_counter() - round_start)
                     result.evaluate_metrics_serverapp[current_round] = res
 
         return result
@@ -174,15 +216,58 @@ class BenchmarkFedYogi(CommunicationTrackingMixin, FedYogi):
 def build_communication_summary(result: Result) -> dict:
     """Create a compact JSON-serializable communication summary."""
 
-    def _extract(metrics_by_round: dict[int, MetricRecord]) -> dict[str, dict[str, int]]:
-        summary: dict[str, dict[str, int]] = {}
+    def _extract(metrics_by_round: dict[int, MetricRecord]) -> dict[str, dict[str, int | float]]:
+        summary: dict[str, dict[str, int | float]] = {}
         for round_id, metrics in metrics_by_round.items():
             summary[str(round_id)] = {
-                key: int(metrics.get(key, 0)) for key in COMM_KEYS
+                key: (
+                    float(metrics.get(key, 0.0))
+                    if key.endswith("_sec")
+                    else int(metrics.get(key, 0))
+                )
+                for key in COMM_KEYS
             }
         return summary
 
+    train_rounds = _extract(result.train_metrics_clientapp)
+    evaluate_rounds = _extract(result.evaluate_metrics_clientapp)
+    server_evaluate_rounds = {}
+    for round_id, metrics in result.evaluate_metrics_serverapp.items():
+        server_evaluate_rounds[str(round_id)] = {
+            "server_eval_time_sec": float(metrics.get("server_eval_time_sec", 0.0)),
+            "round_wall_clock_sec": float(metrics.get("round_wall_clock_sec", 0.0)),
+        }
+
+    total_comm_bytes_down = sum(
+        int(metrics.get("comm_bytes_down", 0))
+        for metrics in result.train_metrics_clientapp.values()
+    ) + sum(
+        int(metrics.get("comm_bytes_down", 0))
+        for metrics in result.evaluate_metrics_clientapp.values()
+    )
+    total_comm_bytes_up = sum(
+        int(metrics.get("comm_bytes_up", 0))
+        for metrics in result.train_metrics_clientapp.values()
+    ) + sum(
+        int(metrics.get("comm_bytes_up", 0))
+        for metrics in result.evaluate_metrics_clientapp.values()
+    )
+    total_comm_time_sec = sum(
+        float(metrics.get("comm_time_sec", 0.0))
+        for metrics in result.train_metrics_clientapp.values()
+    ) + sum(
+        float(metrics.get("comm_time_sec", 0.0))
+        for metrics in result.evaluate_metrics_clientapp.values()
+    )
+
     return {
-        "train_rounds": _extract(result.train_metrics_clientapp),
-        "evaluate_rounds": _extract(result.evaluate_metrics_clientapp),
+        "totals": {
+            "total_comm_bytes_down": total_comm_bytes_down,
+            "total_comm_bytes_up": total_comm_bytes_up,
+            "total_comm_bytes": total_comm_bytes_down + total_comm_bytes_up,
+            "total_comm_time_sec": total_comm_time_sec,
+        },
+        "train_rounds": train_rounds,
+        "evaluate_rounds": evaluate_rounds,
+        "server_evaluate_rounds": server_evaluate_rounds,
     }
