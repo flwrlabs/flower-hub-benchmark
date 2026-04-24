@@ -35,6 +35,7 @@ def main(grid: Grid, context: Context) -> None:
         initial_arrays=arrays,
         num_rounds=num_rounds,
         evaluate_fn=global_evaluate_fn(context),
+        timeout=7200,  # 2 hours
     )
 
     with open(f"result_{run_name}.pkl", "wb") as f:

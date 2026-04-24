@@ -1,7 +1,6 @@
 """fed_legal_llm: Federated LoRA fine-tuning for legal instruction tuning."""
 
 import math
-import os
 import re
 import string
 from dataclasses import dataclass
@@ -13,7 +12,7 @@ from datasets import Dataset as HFDataset
 from datasets import DatasetDict, load_dataset, load_from_disk
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner, NaturalIdPartitioner
-from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import (
@@ -152,7 +151,15 @@ class LegalLoraModel(torch.nn.Module):
             model_kwargs["device_map"] = "auto"
 
         base_model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+
+        if hasattr(base_model, "gradient_checkpointing_enable"):
+            base_model.gradient_checkpointing_enable()
         base_model.config.use_cache = False
+
+
+        if load_in_4bit:
+            base_model = prepare_model_for_kbit_training(base_model)
+
         if hasattr(base_model, "enable_input_require_grads"):
             base_model.enable_input_require_grads()
 
@@ -249,10 +256,19 @@ def train(model: LegalLoraModel, trainloader: DataLoader, epochs: int, lr: float
         for batch in progress:
             batch = {k: v.to(device) for k, v in batch.items()}
             optimizer.zero_grad()
+
             out = model(**batch)
             loss = out.loss
+
+            if not torch.isfinite(loss):
+                raise RuntimeError(f"Non-finite loss detected: {loss.item()}")
+
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
+
             loss_val = float(loss.item())
             running_loss += loss_val
             steps += 1
