@@ -22,6 +22,7 @@ app = ClientApp()
 def train(msg: Message, context: Context):
     """Train the model on local data."""
     model, device = _load_model(msg, context)
+    system_metrics_enabled = _system_metrics_enabled(context)
     batch_size = int(context.run_config["batch-size"])
     num_rounds = int(context.run_config["num-server-rounds"])
     learning_rate_max = float(context.run_config["learning-rate-max"])
@@ -35,10 +36,10 @@ def train(msg: Message, context: Context):
         learning_rate_min,
     )
 
-    if device.type == "cuda":
+    if system_metrics_enabled and device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
-    train_start = time.perf_counter()
+    train_start = time.perf_counter() if system_metrics_enabled else 0.0
     history, _ = train_fn(
         model=model,
         train_loader=trainloader,
@@ -47,7 +48,9 @@ def train(msg: Message, context: Context):
         device=device,
         num_epochs=int(context.run_config["local-epochs"]),
     )
-    client_train_time_sec = time.perf_counter() - train_start
+    client_train_time_sec = (
+        time.perf_counter() - train_start if system_metrics_enabled else 0.0
+    )
 
     summary = summarize_history(history)
     model_record = ArrayRecord(model.state_dict())
@@ -56,10 +59,11 @@ def train(msg: Message, context: Context):
         "train_accuracy": float(summary["avg_train_accuracy"]),
         "train_f1": float(summary["avg_train_f1"]),
         "num-examples": len(trainloader.dataset),
-        "client_train_time_sec": float(client_train_time_sec),
-        "client_peak_cpu_memory_mb": float(_peak_rss_mb()),
-        "client_peak_gpu_memory_mb": float(_peak_gpu_memory_mb(device)),
     }
+    if system_metrics_enabled:
+        metrics["client_train_time_sec"] = float(client_train_time_sec)
+        metrics["client_peak_cpu_memory_mb"] = float(_peak_rss_mb())
+        metrics["client_peak_gpu_memory_mb"] = float(_peak_gpu_memory_mb(device))
     metric_record = MetricRecord(metrics)
     content = RecordDict({"arrays": model_record, "metrics": metric_record})
     return Message(content=content, reply_to=msg)
@@ -116,3 +120,11 @@ def _peak_gpu_memory_mb(device: torch.device) -> float:
     if device.type != "cuda":
         return 0.0
     return torch.cuda.max_memory_allocated(device) / (1024 * 1024)
+
+
+def _system_metrics_enabled(context: Context) -> bool:
+    raw_value = context.node_config.get(
+        "benchmark-system-metrics",
+        context.run_config.get("benchmark-system-metrics", False),
+    )
+    return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
