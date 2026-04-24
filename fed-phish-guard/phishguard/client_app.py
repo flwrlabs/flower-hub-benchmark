@@ -7,10 +7,16 @@ import sys
 import time
 
 import torch
-from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
+from flwr.app import ArrayRecord, ConfigRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
-from phishguard.data import VOCAB_SIZE, load_local_data, load_sim_data
+from phishguard.data import (
+    VOCAB_SIZE,
+    load_local_data,
+    load_local_metadata,
+    load_sim_data,
+    load_sim_metadata,
+)
 from phishguard.model import PhishingCNN
 from phishguard.train import cosine_annealing, summarize_history
 from phishguard.train import train as train_fn
@@ -21,6 +27,15 @@ app = ClientApp()
 @app.train()
 def train(msg: Message, context: Context):
     """Train the model on local data."""
+    benchmark_mode = str(
+        msg.content["config"].get("benchmark_mode", "train")
+    ).strip().lower()
+    if benchmark_mode == "verify_only":
+        metadata = _load_metadata(context)
+        config_record = ConfigRecord(metadata)
+        content = RecordDict({"config": config_record})
+        return Message(content=content, reply_to=msg)
+
     model, device = _load_model(msg, context)
     system_metrics_enabled = _system_metrics_enabled(context)
     batch_size = int(context.run_config["batch-size"])
@@ -106,6 +121,29 @@ def _load_data(context: Context, batch_size: int, device: torch.device):
         data_path=str(context.node_config["data-path"]),
         batch_size=batch_size,
         device=device,
+    )
+
+
+def _load_metadata(context: Context) -> dict[str, int | str]:
+    if (
+        "partition-id" in context.node_config
+        and "num-partitions" in context.node_config
+    ):
+        return load_sim_metadata(
+            partition_id=int(context.node_config["partition-id"]),
+            num_partitions=int(context.node_config["num-partitions"]),
+            partitioner_name=str(context.run_config["partitioner"]),
+        )
+
+    if "data-path" not in context.node_config:
+        raise ValueError(
+            "Deployment mode requires node_config['data-path'] to point to a local dataset."
+        )
+
+    return load_local_metadata(
+        data_path=str(context.node_config["data-path"]),
+        dataset_version=str(context.node_config.get("dataset-version", "local")),
+        fallback_partition_id=context.node_config.get("partition-id", "unknown"),
     )
 
 

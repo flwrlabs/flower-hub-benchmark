@@ -16,6 +16,7 @@ Global server-side evaluation:
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 from typing import Optional
 
 import torch
@@ -181,6 +182,47 @@ def _extract_columns(hf_ds: HFDataset) -> tuple[list[str], list[int]]:
     return urls, labels
 
 
+def _extract_partition_id(hf_ds: HFDataset, fallback_partition_id: int | str) -> int | str:
+    if PARTITION_COL in hf_ds.column_names and len(hf_ds) > 0:
+        client_ids = {int(x) for x in hf_ds[PARTITION_COL]}
+        if len(client_ids) == 1:
+            return next(iter(client_ids))
+    return fallback_partition_id
+
+
+def _dataset_fingerprint(hf_ds: HFDataset) -> str:
+    """Build a deterministic fingerprint for one partition."""
+    hasher = hashlib.sha256()
+    urls, labels = _extract_columns(hf_ds)
+
+    for idx, (url, label) in enumerate(zip(urls, labels)):
+        hasher.update(str(idx).encode("utf-8"))
+        hasher.update(b"|")
+        hasher.update(url_to_bytes(url))
+        hasher.update(b"|")
+        hasher.update(str(int(label)).encode("utf-8"))
+        if PARTITION_COL in hf_ds.column_names:
+            hasher.update(b"|")
+            hasher.update(str(hf_ds[idx][PARTITION_COL]).encode("utf-8"))
+        hasher.update(b"\n")
+
+    return hasher.hexdigest()
+
+
+def build_partition_metadata(
+    hf_ds: HFDataset,
+    *,
+    dataset_version: str,
+    fallback_partition_id: int | str,
+) -> dict[str, int | str]:
+    return {
+        "partition_id": _extract_partition_id(hf_ds, fallback_partition_id),
+        "dataset_version": dataset_version,
+        "dataset_fingerprint": _dataset_fingerprint(hf_ds),
+        "num_examples": len(hf_ds),
+    }
+
+
 def _make_trainloader_from_split(
     train_ds: HFDataset,
     batch_size: int,
@@ -265,6 +307,21 @@ def load_sim_data(
     )
 
 
+def load_sim_metadata(
+    partition_id: int,
+    num_partitions: int,
+    dataset_id: str = SIM_FED_DATASET_ID,
+    partitioner_name: str = "iid",
+) -> dict[str, int | str]:
+    fds = _load_sim_fds(dataset_id, partitioner_name, num_partitions)
+    train_client_ds = fds.load_partition(partition_id, "train")
+    return build_partition_metadata(
+        train_client_ds,
+        dataset_version=dataset_id,
+        fallback_partition_id=partition_id,
+    )
+
+
 def load_local_data(
     data_path: str,
     batch_size: int,
@@ -298,6 +355,34 @@ def load_local_data(
 
     raise ValueError(
         f"Unsupported local dataset at {data_path}. Expected DatasetDict or Dataset."
+    )
+
+
+def load_local_metadata(
+    data_path: str,
+    *,
+    dataset_version: str = "local",
+    fallback_partition_id: int | str = "unknown",
+) -> dict[str, int | str]:
+    ds = load_from_disk(data_path)
+
+    if isinstance(ds, DatasetDict):
+        if "train" not in ds:
+            raise ValueError(
+                f"Local DatasetDict at {data_path} must contain a 'train' split."
+            )
+        train_ds = ds["train"]
+    elif isinstance(ds, HFDataset):
+        train_ds = ds
+    else:
+        raise ValueError(
+            f"Unsupported local dataset at {data_path}. Expected DatasetDict or Dataset."
+        )
+
+    return build_partition_metadata(
+        train_ds,
+        dataset_version=dataset_version,
+        fallback_partition_id=fallback_partition_id,
     )
 
 

@@ -66,7 +66,15 @@ def main(grid: Grid, context: Context) -> None:
     with open(f"result_{run_name}.pkl", "wb") as f:
         pickle.dump(result, f)
     with open(f"result_{run_name}_communication.json", "w", encoding="utf-8") as f:
-        json.dump(build_communication_summary(result), f, indent=2, sort_keys=True)
+        json.dump(
+            build_communication_summary(
+                result,
+                verification_summary=getattr(strategy, "verification_summary", None),
+            ),
+            f,
+            indent=2,
+            sort_keys=True,
+        )
 
 
 def get_strategy(strategy_name: str, fraction_train: float, fraction_evaluate: float, context: Context):
