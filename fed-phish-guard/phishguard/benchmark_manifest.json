@@ -1,0 +1,37 @@
+{
+  "benchmark_id": "fed-phish-guard",
+  "dataset_version": "flwrlabs/fed-phishing-urls",
+  "expected_client_count": 5,
+  "clients": {
+    "0": {
+      "partition_id": 0,
+      "dataset_version": "flwrlabs/fed-phishing-urls",
+      "num_examples": null,
+      "dataset_fingerprint": null
+    },
+    "1": {
+      "partition_id": 1,
+      "dataset_version": "flwrlabs/fed-phishing-urls",
+      "num_examples": null,
+      "dataset_fingerprint": null
+    },
+    "2": {
+      "partition_id": 2,
+      "dataset_version": "flwrlabs/fed-phishing-urls",
+      "num_examples": null,
+      "dataset_fingerprint": null
+    },
+    "3": {
+      "partition_id": 3,
+      "dataset_version": "flwrlabs/fed-phishing-urls",
+      "num_examples": null,
+      "dataset_fingerprint": null
+    },
+    "4": {
+      "partition_id": 4,
+      "dataset_version": "flwrlabs/fed-phishing-urls",
+      "num_examples": null,
+      "dataset_fingerprint": null
+    }
+  }
+}

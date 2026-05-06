@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-audio-tagging"
+version = "1.0.0"
+description = "Federated Learning for Urban Audio Tagging"
+license = { file = "LICENSE" }
+dependencies = [
+    "flwr[simulation]>=1.29.0",
+    "flwr-datasets[audio]>=0.6.0",
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    "soundfile>=0.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "flwrlabs"
+fab-format-version = 1
+flwr-version-target = "1.29.0"
+
+[tool.flwr.app.components]
+serverapp = "fedaudio.server_app:app"
+clientapp = "fedaudio.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "fedavg_round100"
+num-server-rounds = 100
+strategy = "fedavg"  # choose from [fedavg, fedprox, fedavgm, ...]
+fedprox-mu = 0.1
+eta = 1e-2
+eta_l = 1e-2
+fraction-train = 0.3
+fraction-evaluate = 0.0
+local-epochs = 2
+learning-rate-max = 1e-2
+learning-rate-min = 1e-4
+batch-size = 32
+benchmark-system-metrics = false
+benchmark-run-server-eval = true
+
+# Simulation partitioner: "iid" or "natural"
+partitioner = "natural"

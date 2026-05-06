@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fed-phish-guard"
+version = "1.0.0"
+description = "Federated Learning for Phishing URL Detection"
+license = { file = "LICENSE" }
+dependencies = [
+    "flwr[simulation]>=1.29.0",
+    "flwr-datasets>=0.6.0",
+    "torch==2.8.0",
+    "datasets==3.5.0",
+    "numpy==2.2.4",
+    "scikit-learn==1.8.0",
+    "pandas==3.0.1",
+    "tqdm==4.67.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "flwrlabs"
+fab-format-version = 1
+flwr-version-target = "1.29.0"
+
+[tool.flwr.app.components]
+serverapp = "phishguard.server_app:app"
+clientapp = "phishguard.client_app:app"
+
+[tool.flwr.app.config]
+run-name = "fedavg_round20"
+num-server-rounds = 20
+strategy = "fedavg"  # choose from [fedavg, fedprox, fedavgm, ...]
+fedprox-mu = 0.01
+eta = 5e-4
+eta_l = 1e-3
+fraction-train = 0.1
+fraction-evaluate = 0.0
+local-epochs = 1
+learning-rate-max = 1e-3
+learning-rate-min = 1e-4
+batch-size = 128
+embed-dim = 64
+num-filters = 128
+dropout = 0.3
+benchmark-verify-dataset = false
+benchmark-manifest-path = ""
+benchmark-system-metrics = false
+benchmark-run-server-eval = true
+
+# Simulation partitioner: "iid" or "natural"
+partitioner = "natural"
